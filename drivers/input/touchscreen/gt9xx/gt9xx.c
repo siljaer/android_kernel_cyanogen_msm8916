@@ -51,6 +51,7 @@
 #include <linux/module.h>
 #include <linux/input/mt.h>
 #include <linux/debugfs.h>
+#include <linux/interrupt.h>
 
 #define GOODIX_DEV_NAME	"Goodix-CTP"
 #define CFG_MAX_TOUCH_POINTS	5
