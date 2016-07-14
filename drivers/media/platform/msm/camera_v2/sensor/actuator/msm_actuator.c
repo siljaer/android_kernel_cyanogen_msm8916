@@ -484,21 +484,17 @@ static int32_t msm_actuator_init_step_table(struct msm_actuator_ctrl_t *a_ctrl,
 	uint16_t data_size = set_info->actuator_params.data_size;
 	CDBG("Enter\n");
 
-	/* validate the actuator state */
-	if (a_ctrl->actuator_state != ACTUATOR_POWER_UP) {
-		pr_err("%s:%d invalid actuator_state %d\n"
-			, __func__, __LINE__, a_ctrl->actuator_state);
-		return -EINVAL;
-	}
-
 	for (; data_size > 0; data_size--)
 		max_code_size *= 2;
 
 	a_ctrl->max_code_size = max_code_size;
-	/* free the step_position_table to allocate a new one */
-	kfree(a_ctrl->step_position_table);
 
-	a_ctrl->step_position_table = NULL;
+	/* free the step_position_table to allocate a new one */
+	if ((a_ctrl->actuator_state == ACTUATOR_POWER_UP) &&
+ 		(a_ctrl->step_position_table != NULL)) {
+ 		kfree(a_ctrl->step_position_table);
+		a_ctrl->step_position_table = NULL;
+ 	}
 
 	if (set_info->af_tuning_params.total_steps
 		>  MAX_ACTUATOR_AF_TOTAL_STEPS) {
