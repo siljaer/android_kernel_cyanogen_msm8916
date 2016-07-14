@@ -963,9 +963,8 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 		config_data[ts->gtp_cfg_len] = (~check_sum) + 1;
 
 	} else { /* DRIVER NOT SEND CONFIG */
-		ts->gtp_cfg_len = GTP_CONFIG_MAX_LENGTH;
-		ret = gtp_i2c_read(ts->client, config_data,
-			ts->gtp_cfg_len + GTP_ADDR_LENGTH);
+		ret = gtp_i2c_read_dbl_check(ts->client, GTP_REG_CONFIG_DATA, &opr_buf[2], sizeof(opr_buf)-4);
+		config_data = opr_buf;
 		if (ret < 0) {
 			dev_err(&client->dev,
 				"Read Config Failed, Using DEFAULT Resolution & INT Trigger!\n");
