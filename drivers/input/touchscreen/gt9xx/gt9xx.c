@@ -1181,7 +1181,7 @@ static int gtp_request_irq(struct goodix_ts_data *ts)
 
 	ret = request_threaded_irq(ts->client->irq, NULL,
 			goodix_ts_irq_handler,
-			irq_table[ts->int_trigger_type],
+			irq_table[ts->int_trigger_type] | IRQF_ONESHOT,
 			ts->client->name, ts);
 	if (ret) {
 		ts->use_irq = false;
