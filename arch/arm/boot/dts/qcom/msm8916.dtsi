@@ -1657,6 +1657,10 @@
 		qcom,online-hotplug-core;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
+		qcom,synchronous-cluster-id = <0>;
+		qcom,synchronous-cluster-map = <0 0x0F>;
+		qcom,disable-gfx-phase-ctrl = <1>;
+		qcom,disable-cx-phase-ctrl = <1>;
 		vdd-dig-supply = <&pm8916_s1_floor_corner>;
 
 		qcom,vdd-dig-rstr{
