@@ -153,6 +153,7 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 	int i, err = 0;
 
 	BUG_ON(!host);
+	pr_debug("%s: Enter %s ocr=0x%x\n", mmc_hostname(host), __func__, ocr);
 
 	cmd.opcode = SD_APP_OP_COND;
 	if (mmc_host_is_spi(host))
@@ -163,11 +164,14 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 
 	for (i = 100; i; i--) {
 		err = mmc_wait_for_app_cmd(host, NULL, &cmd, MMC_CMD_RETRIES);
-		if (err)
-			break;
+		if (err) {
+			pr_debug("%s: %s error=%d ocr=0x%x try=%d\n", mmc_hostname(host), __func__, err, ocr, 100-i);
+			if (ocr != 0)
+				break;
+		}
 
 		/* if we're just probing, do a single pass */
-		if (ocr == 0)
+		if ((ocr == 0) && (i < 95))
 			break;
 
 		/* otherwise wait until reset completes */
@@ -178,7 +182,7 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 			if (cmd.resp[0] & MMC_CARD_BUSY)
 				break;
 		}
-
+		pr_debug("%s: %s resp=0x%x ocr=0x%x try=%d\n", mmc_hostname(host), __func__, cmd.resp[0], ocr, 100-i);
 		err = -ETIMEDOUT;
 
 		mmc_delay(10);
@@ -186,6 +190,8 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 
 	if (rocr && !mmc_host_is_spi(host))
 		*rocr = cmd.resp[0];
+
+	pr_debug("%s: Exit %s ocr=0x%x tries=%d\n", mmc_hostname(host), __func__, *rocr, 100-i);
 
 	return err;
 }
