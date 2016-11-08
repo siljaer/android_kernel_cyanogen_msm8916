@@ -468,7 +468,7 @@ static int get_data_block_ro(struct inode *inode, sector_t iblock,
 	return 0;
 }
 
-static int get_data_block_ro_bmap(struct inode *inode, sector_t iblock,
+static int get_data_block_bmap(struct inode *inode, sector_t iblock,
 			struct buffer_head *bh_result, int create)
 {
 	/* Block number less than F2FS MAX BLOCKS */
@@ -782,7 +782,7 @@ static int f2fs_set_data_page_dirty(struct page *page)
 
 static sector_t f2fs_bmap(struct address_space *mapping, sector_t block)
 {
-	return generic_block_bmap(mapping, block, get_data_block_ro_bmap);
+	return generic_block_bmap(mapping, block, get_data_block_bmap);
 }
 
 const struct address_space_operations f2fs_dblock_aops = {
