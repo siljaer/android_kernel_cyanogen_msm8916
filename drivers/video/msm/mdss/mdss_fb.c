@@ -2,7 +2,7 @@
  * Core MDSS framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -620,7 +620,7 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	unlock_fb_info(mfd->fbi);
 
 	mutex_lock(&mfd->bl_lock);
-	mfd->bl_updated = true;
+	mfd->allow_bl_update = true;
 	mdss_fb_set_backlight(mfd, bl_lvl);
 	mutex_unlock(&mfd->bl_lock);
 
@@ -1180,7 +1180,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	if (
 #ifndef CONFIG_LEDS_TRIGGER_BACKLIGHT
 		(((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
-		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd)) ||
+		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
 #endif
 		mfd->panel_info->cont_splash_enabled) {
 		mfd->unset_bl_level = bkl_lvl;
@@ -1228,7 +1228,7 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 	if (!mfd->unset_bl_level)
 		return;
 	mutex_lock(&mfd->bl_lock);
-	if (!mfd->bl_updated) {
+	if (!mfd->allow_bl_update) {
 		pdata = dev_get_platdata(&mfd->pdev->dev);
 		if ((pdata) && (pdata->set_backlight)) {
 			mfd->bl_level = mfd->unset_bl_level;
@@ -1240,8 +1240,8 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 				mdss_fb_scale_bl(mfd, &temp);
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level_scaled = mfd->unset_bl_level;
-			mfd->bl_updated = 1;
 			mdss_fb_bl_update_notify(mfd);
+			mfd->allow_bl_update = true;
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);
@@ -1346,7 +1346,7 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 			mdss_fb_stop_disp_thread(mfd);
 		mutex_lock(&mfd->bl_lock);
 		mdss_fb_set_backlight(mfd, 0);
-		mfd->bl_updated = 0;
+		mfd->allow_bl_update = false;
 		mfd->unset_bl_level = current_bl;
 		mutex_unlock(&mfd->bl_lock);
 	}
@@ -1413,8 +1413,8 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 	/* Reset the backlight only if the panel was off */
 	if (mdss_panel_is_power_off(cur_power_state)) {
 		mutex_lock(&mfd->bl_lock);
-		if (!mfd->bl_updated) {
-			mfd->bl_updated = 1;
+		if (!mfd->allow_bl_update) {
+			mfd->allow_bl_update = true;
 			/*
 			 * If in AD calibration mode then frameworks would not
 			 * be allowed to update backlight hence post unblank
@@ -1425,6 +1425,13 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 				mdss_fb_set_backlight(mfd, mfd->calib_mode_bl);
 			else if (!mfd->panel_info->mipi.post_init_delay)
 				mdss_fb_set_backlight(mfd, mfd->unset_bl_level);
+
+			/*
+			 * it blocks the backlight update between unblank and
+			 * first kickoff to avoid backlight turn on before black
+			 * frame is transferred to panel through unblank call.
+			 */
+			mfd->allow_bl_update = false;
 		}
 		mutex_unlock(&mfd->bl_lock);
 	}
@@ -3297,8 +3304,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_2;
 	}
 
-	sync_fence_install(rel_fence, rel_fen_fd);
-
 	ret = copy_to_user(buf_sync->rel_fen_fd, &rel_fen_fd, sizeof(int));
 	if (ret) {
 		pr_err("%s: copy_to_user failed\n", sync_pt_data->fence_name);
@@ -3335,8 +3340,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_3;
 	}
 
-	sync_fence_install(retire_fence, retire_fen_fd);
-
 	ret = copy_to_user(buf_sync->retire_fen_fd, &retire_fen_fd,
 			sizeof(int));
 	if (ret) {
@@ -3347,7 +3350,10 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_3;
 	}
 
+	sync_fence_install(retire_fence, retire_fen_fd);
+
 skip_retire_fence:
+	sync_fence_install(rel_fence, rel_fen_fd);
 	mutex_unlock(&sync_pt_data->sync_mutex);
 
 	if (buf_sync->flags & MDP_BUF_SYNC_FLAG_WAIT)

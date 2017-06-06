@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2016, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -852,9 +852,10 @@ int adm_get_params_v2(int port_id, int copp_idx, uint32_t module_id,
 		      char *params, uint32_t client_id)
 {
 	struct adm_cmd_get_pp_params_v5 *adm_params = NULL;
-	int sz, rc = 0, i = 0;
+	int rc = 0, i = 0;
 	int port_idx, idx;
 	int *params_data = (int *)params;
+	uint64_t sz = 0;
 
 	port_id = afe_convert_virtual_to_portid(port_id);
 	port_idx = adm_validate_and_get_port_index(port_id);
@@ -863,7 +864,16 @@ int adm_get_params_v2(int port_id, int copp_idx, uint32_t module_id,
 		return -EINVAL;
 	}
 
-	sz = sizeof(struct adm_cmd_get_pp_params_v5) + params_length;
+	sz = (uint64_t)sizeof(struct adm_cmd_get_pp_params_v5) +
+				(uint64_t)params_length;
+	/*
+	 * Check if the value of "sz" (which is ultimately assigned to
+	 * "hdr.pkt_size") crosses U16_MAX.
+	 */
+	if (sz > U16_MAX) {
+		pr_err("%s: Invalid params_length\n", __func__);
+		return -EINVAL;
+	}
 	adm_params = kzalloc(sz, GFP_KERNEL);
 	if (!adm_params) {
 		pr_err("%s: adm params memory alloc failed", __func__);
@@ -2097,14 +2107,14 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 		} else if (channel_mode == 4) {
 			open.dev_channel_mapping[0] = PCM_CHANNEL_FL;
 			open.dev_channel_mapping[1] = PCM_CHANNEL_FR;
-			open.dev_channel_mapping[2] = PCM_CHANNEL_RB;
-			open.dev_channel_mapping[3] = PCM_CHANNEL_LB;
+			open.dev_channel_mapping[2] = PCM_CHANNEL_LS;
+			open.dev_channel_mapping[3] = PCM_CHANNEL_RS;
 		} else if (channel_mode == 5) {
 			open.dev_channel_mapping[0] = PCM_CHANNEL_FL;
 			open.dev_channel_mapping[1] = PCM_CHANNEL_FR;
 			open.dev_channel_mapping[2] = PCM_CHANNEL_FC;
-			open.dev_channel_mapping[3] = PCM_CHANNEL_LB;
-			open.dev_channel_mapping[4] = PCM_CHANNEL_RB;
+			open.dev_channel_mapping[3] = PCM_CHANNEL_LS;
+			open.dev_channel_mapping[4] = PCM_CHANNEL_RS;
 		} else if (channel_mode == 6) {
 			open.dev_channel_mapping[0] = PCM_CHANNEL_FL;
 			open.dev_channel_mapping[1] = PCM_CHANNEL_FR;
@@ -2117,10 +2127,10 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			open.dev_channel_mapping[1] = PCM_CHANNEL_FR;
 			open.dev_channel_mapping[2] = PCM_CHANNEL_LFE;
 			open.dev_channel_mapping[3] = PCM_CHANNEL_FC;
-			open.dev_channel_mapping[4] = PCM_CHANNEL_LB;
-			open.dev_channel_mapping[5] = PCM_CHANNEL_RB;
-			open.dev_channel_mapping[6] = PCM_CHANNEL_FLC;
-			open.dev_channel_mapping[7] = PCM_CHANNEL_FRC;
+			open.dev_channel_mapping[4] = PCM_CHANNEL_LS;
+			open.dev_channel_mapping[5] = PCM_CHANNEL_RS;
+			open.dev_channel_mapping[6] = PCM_CHANNEL_LB;
+			open.dev_channel_mapping[7] = PCM_CHANNEL_RB;
 		} else {
 			pr_err("%s: invalid num_chan %d\n", __func__,
 					channel_mode);
@@ -2135,8 +2145,8 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			__func__, open.endpoint_id_1, open.sample_rate,
 			open.topology_id);
 
-		if (open.topology_id == VPM_TX_LEC_STEREO_REF ||
-			open.topology_id == VPM_TX_LEC_MONO_REF) {
+		if ((this_adm.ec_ref_cfg.channel != 0) && (path != 1) &&
+			(open.endpoint_id_2 != 0xFFFF)) {
 			int ref_end_channel_mode = this_adm.ec_ref_cfg.channel;
 			use_open_v6 = true;
 			/* overwrite open opcode and pkt size here to use

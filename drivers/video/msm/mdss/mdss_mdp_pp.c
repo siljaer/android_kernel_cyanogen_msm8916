@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3748,11 +3748,13 @@ static int pp_hist_disable(struct pp_hist_col_info *hist_info)
 		ret = -EINVAL;
 		goto exit;
 	}
-	hist_info->col_en = false;
-	hist_info->col_state = HIST_UNKNOWN;
 	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	mdss_mdp_hist_intr_req(&mdata->hist_intr,
 				intr_mask << hist_info->intr_shift, false);
+	spin_lock_irqsave(&hist_info->hist_lock, flag);
+	hist_info->col_en = false;
+	hist_info->col_state = HIST_UNKNOWN;
+	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	complete_all(&hist_info->first_kick);
 	complete_all(&hist_info->comp);
 	/* if hist v2, make sure HW is unlocked */
@@ -4418,6 +4420,7 @@ void mdss_mdp_hist_intr_done(u32 isr)
 	bool need_complete = false;
 	u32 isr_mask = (is_hist_v2) ? HIST_V2_INTR_BIT_MASK :
 			HIST_V1_INTR_BIT_MASK;
+	u32 intr_mask = is_hist_v2 ? 1 : 3;
 
 	isr &= isr_mask;
 	while (isr != 0) {
@@ -4452,7 +4455,16 @@ void mdss_mdp_hist_intr_done(u32 isr)
 			 * Histogram collection is disabled yet we got an
 			 * interrupt somehow.
 			 */
-			pr_err("hist Done interrupt, col_en=false!\n");
+			if (mdata->mdp_hist_irq_mask ==
+					(intr_mask << hist_info->intr_shift)) {
+				mdss_mdp_hist_intr_req(&mdata->hist_intr,
+					intr_mask << hist_info->intr_shift,
+					false);
+				pr_err("Disable hist interrupt,	irq mask=%x\n",
+						mdata->mdp_hist_irq_mask);
+			} else {
+				pr_err("hist Done interrupt, col_en=false!\n");
+			}
 		}
 		/* Histogram Reset Done Interrupt */
 		if (hist_info && is_hist_reset_done && (hist_info->col_en)) {
@@ -5705,9 +5717,6 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	int ret = 0;
 	char __iomem *ptr = addr;
 	char __iomem *mixer_base = mdss_res->mixer_intf->base;
-	char __iomem *rgb_base   = mdss_res->rgb_pipes->base;
-	char __iomem *dma_base   = mdss_res->dma_pipes->base;
-	char __iomem *vig_base   = mdss_res->vig_pipes->base;
 	char __iomem *ctl_base   = mdss_res->ctl_off->base;
 	char __iomem *dspp_base  = mdss_res->mixer_intf->dspp_base;
 
@@ -5739,17 +5748,20 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= vig_base) {
+		if (mdss_res->vig_pipes &&
+		    ptr >= mdss_res->vig_pipes->base) {
 			ret = is_valid_calib_vig_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= rgb_base) {
+		if (mdss_res->rgb_pipes &&
+		    ptr >= mdss_res->rgb_pipes->base) {
 			ret = is_valid_calib_rgb_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= dma_base) {
+		if (mdss_res->dma_pipes &&
+		    ptr >= mdss_res->dma_pipes->base) {
 			ret = is_valid_calib_dma_addr(ptr);
 			if (ret)
 				goto valid_addr;
